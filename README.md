@@ -5,7 +5,10 @@ It polls `claude agents --json` on an interval and shows one row per running
 Claude Code session, so you can see what every agent is doing at a glance — and
 get pulled back the moment one needs you.
 
-![one Python file, GTK 3, no build step](https://img.shields.io/badge/stack-Python%203%20%2B%20GTK%203-blue)
+![The dashboard showing several Claude Code sessions](docs/screenshot.png)
+
+<sub>Sessions above are illustrative. Attention states (needs-permission, waiting-on-you)
+sort to the top with alarm-colored cards; a busy test run is flagged with a red CPU chip.</sub>
 
 ## What it shows
 
