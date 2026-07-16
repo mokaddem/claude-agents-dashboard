@@ -60,9 +60,10 @@ logical cores), so it stays in 0–100%**. The
 previous snapshot lives on the window (`_prev_jiffies` / `_prev_time`); it is
 single-threaded-safe only because `_fetching` serialises fetches. Per-session
 values render right-aligned under each badge (`.stats`). A session at/above
-**`CPU_HOT_PCT`** (default 15% of total capacity) gets a **strong highlight** — a
-filled orange chip — via the `.stats.hot` class, toggled in `_update_row`, so a
-CI/test run that's burning CPU stands out. RSS summed across a tree double-counts
+**`CPU_WARN_PCT`** (10%) / **`CPU_CRIT_PCT`** (25%, both % of total capacity) gets
+its stats highlighted as a **filled chip** — yellow `.stats.warn` above warn, red
+`.stats.crit` above crit — toggled in `_update_row`, so a CI/test run that's
+burning CPU stands out. RSS summed across a tree double-counts
 shared pages — it's a gauge, not an accountant.
 
 `_sample_resources` also returns **whole-machine** usage (not the agent sum):

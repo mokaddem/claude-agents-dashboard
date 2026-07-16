@@ -213,8 +213,9 @@ try:
 except (ValueError, OSError, AttributeError):
     _PAGE_SIZE = 4096
 _NCPU = os.cpu_count() or 1                       # logical cores (CPU% divisor)
-CPU_HOT_PCT = 15.0                                # highlight a session whose tree
-                                                  # uses more than this % of total CPU
+CPU_WARN_PCT = 10.0                               # per-session CPU highlight (% of
+CPU_CRIT_PCT = 25.0                               # total capacity): >warn = yellow,
+                                                  # >crit = red
 
 
 def read_proc_stats():
@@ -539,10 +540,12 @@ row.idle              { border-left-color: #3a3f4b; }
 
 /* per-agent CPU% + resident memory (self + all child processes) */
 .stats                { font-family: monospace; font-size: 9px; color: #79818f; }
-/* .hot = this session's tree is over CPU_HOT_PCT of total CPU */
-/* stronger highlight for a session over CPU_HOT_PCT: a filled orange chip */
-.stats.hot            { color: #241206; font-weight: 800;
-                        background-color: #fb923c; border-radius: 6px;
+/* per-session CPU highlight: filled yellow chip >CPU_WARN_PCT, red >CPU_CRIT_PCT */
+.stats.warn           { color: #241f08; font-weight: 800;
+                        background-color: #f7c948; border-radius: 6px;
+                        padding: 1px 7px; }
+.stats.crit           { color: #1a0f0f; font-weight: 800;
+                        background-color: #ff5c57; border-radius: 6px;
                         padding: 1px 7px; }
 
 .empty                { color: #6b7280; font-size: 12px; }
@@ -1243,10 +1246,12 @@ class DashboardWindow(Gtk.Window):
         else:
             row._stats.set_text(fmt_stats(cpu, mem))
             sctx = row._stats.get_style_context()
-            if cpu is not None and cpu >= CPU_HOT_PCT:
-                sctx.add_class("hot")          # burning CPU -> highlight the row's stats
-            else:
-                sctx.remove_class("hot")
+            sctx.remove_class("warn")
+            sctx.remove_class("crit")
+            if cpu is not None and cpu > CPU_CRIT_PCT:
+                sctx.add_class("crit")         # >25% total CPU -> red chip
+            elif cpu is not None and cpu > CPU_WARN_PCT:
+                sctx.add_class("warn")         # >10% total CPU -> yellow chip
             row._stats.set_visible(True)
 
         tip = (f"{name}\ncwd: {s.get('cwd','?')}\nstate: {s.get('state','—')}   "
