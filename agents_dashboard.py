@@ -550,6 +550,27 @@ row.idle              { border-left-color: #3a3f4b; }
 
 .empty                { color: #6b7280; font-size: 12px; }
 .error                { color: #ff8a84; font-size: 11px; padding: 8px 14px; }
+
+/* ultra-minimized (compact-bar) mode: the window gets the .mini class, which
+   tightens the header so the whole app collapses to a ~64px strip. The session
+   list is hidden; each session is instead shown as one small state square. */
+.mini .header         { padding: 3px 10px; }
+.mini .usage          { margin-top: 0; margin-bottom: 0; }
+
+/* one state square per session (mini mode): the category glyph on a filled,
+   category-coloured tile. The border is always 2px (transparent when calm) so
+   the pulse ring can appear without changing the square's size. */
+button.square         { min-width: 28px; min-height: 28px; padding: 0; margin: 0;
+                        border: 2px solid transparent; border-radius: 7px;
+                        background-image: none; box-shadow: none; outline: none;
+                        background-color: #20232b; color: #c7ccd6;
+                        font-size: 14px; }
+button.square.permission { background-color: #ff5c57; color: #1a0f0f; }
+button.square.question   { background-color: #f7c948; color: #241f08; }
+button.square.working    { background-color: #fb923c; color: #241606; }
+button.square.done       { background-color: #34d399; color: #062117; }
+button.square.idle       { background-color: #2b2f38; color: #8b93a3; }
+button.square.pulse      { border-color: rgba(255, 255, 255, 0.92); }
 """
 
 
@@ -725,6 +746,10 @@ class DashboardWindow(Gtk.Window):
         self._fetching = False        # a fetch is in flight (avoid pile-up)
         self.active_filters = set()   # categories to show; empty = show all
         self.filter_buttons = {}      # category -> (ToggleButton, Gtk.Label)
+        self._mini = False            # ultra-minimized (compact-bar) mode on/off
+        self._normal_size = None      # (w, h) to restore when leaving mini mode
+        self.squares = {}             # sessionId -> mini-mode state square (button)
+        self.attention_squares = []   # squares currently pulsing (mirrors rows)
         self._activity_cache = {}     # sessionId -> ((mtime, size), activity str)
         self._transcript_path = {}    # sessionId -> resolved transcript path
         self._prev_jiffies = {}       # pid -> cumulative CPU jiffies (last sample)
@@ -768,7 +793,7 @@ class DashboardWindow(Gtk.Window):
         header.get_style_context().add_class("header")
 
         top = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL)
-        title = Gtk.Label(label="CLAUDE AGENTS DASHBOARD", xalign=0.0)
+        title = self.title = Gtk.Label(label="CLAUDE AGENTS DASHBOARD", xalign=0.0)
         title.get_style_context().add_class("title")
         self.summary = Gtk.Label(xalign=1.0)   # total-session count, right-aligned
         self.summary.get_style_context().add_class("subtitle")
@@ -785,9 +810,35 @@ class DashboardWindow(Gtk.Window):
         self.chrome_btn.set_tooltip_text("Toggle the window title bar")
         self.chrome_btn.connect("toggled", self._on_toggle_chrome)
 
+        # ultra-minimize toggle, parked just left of the title-bar toggle. Active =
+        # collapsed to a ~64px strip of per-session state squares (+ the meters).
+        # Like the chrome toggle it's a mouse-click, so it needs no focus and works
+        # even in --top mode.
+        self.mini_btn = Gtk.ToggleButton()
+        self.mini_btn.set_relief(Gtk.ReliefStyle.NONE)
+        self.mini_btn.set_can_focus(False)
+        self.mini_btn.add(Gtk.Label(label="▬"))    # "▬" — collapse to a bar
+        self.mini_btn.get_style_context().add_class("chrome")
+        self.mini_btn.set_tooltip_text("Ultra-minimize to a compact bar")
+        self.mini_btn.connect("toggled", self._on_toggle_mini)
+
+        # State-squares strip: only shown in mini mode, where it takes over the
+        # title's space (the title is hidden). Horizontal-scrolls if there are
+        # more squares than fit; overlay scrollbar so it doesn't steal height.
+        self.mini_squares = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=4)
+        self.mini_squares.set_valign(Gtk.Align.CENTER)
+        self.mini_squares_scroll = Gtk.ScrolledWindow()
+        self.mini_squares_scroll.set_policy(Gtk.PolicyType.AUTOMATIC, Gtk.PolicyType.NEVER)
+        self.mini_squares_scroll.set_overlay_scrolling(True)
+        self.mini_squares_scroll.set_propagate_natural_height(True)
+        self.mini_squares_scroll.add(self.mini_squares)
+        self.mini_squares_scroll.set_no_show_all(True)  # hidden until mini mode
+
         top.pack_start(title, False, False, 0)
+        top.pack_start(self.mini_squares_scroll, True, True, 6)  # fills when title hidden
         top.pack_end(self.chrome_btn, False, False, 0)  # far right
-        top.pack_end(self.summary, False, False, 0)     # left of the toggle
+        top.pack_end(self.mini_btn, False, False, 0)    # left of the chrome toggle
+        top.pack_end(self.summary, False, False, 0)     # left of the toggles
         header.pack_start(top, False, False, 0)
 
         # Resource band: Claude usage meter on the LEFT, whole-machine CPU + MEM
@@ -835,7 +886,7 @@ class DashboardWindow(Gtk.Window):
 
         # per-category filter toggles — click an icon to show only that kind;
         # multiple can be active at once; none active = show everything.
-        filt = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
+        filt = self.filt = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         for cat in ("permission", "question", "working", "done", "idle"):
             btn = Gtk.ToggleButton()
             btn.set_relief(Gtk.ReliefStyle.NONE)
@@ -864,7 +915,7 @@ class DashboardWindow(Gtk.Window):
         outer.pack_start(self.error, False, False, 0)
 
         # scrollable list ---------------------------------------------------
-        scroll = Gtk.ScrolledWindow()
+        scroll = self.scroll = Gtk.ScrolledWindow()
         scroll.set_policy(Gtk.PolicyType.NEVER, Gtk.PolicyType.AUTOMATIC)
         self.listbox = Gtk.ListBox()
         self.listbox.set_selection_mode(Gtk.SelectionMode.NONE)
@@ -907,6 +958,40 @@ class DashboardWindow(Gtk.Window):
         # Add/remove the window-manager title bar at runtime. GTK applies this
         # live (verified on X11/Xwayland); no re-map needed.
         self.set_decorated(btn.get_active())
+
+    def _on_toggle_mini(self, btn):
+        self._set_mini(btn.get_active())
+
+    def _set_mini(self, mini):
+        # Ultra-minimize: collapse to a ~64px strip showing just the meters and
+        # one state square per session (the full list + header text are hidden).
+        # The .mini class on the window tightens the header padding (see CSS).
+        if mini == self._mini:
+            return
+        self._mini = mini
+        wctx = self.get_style_context()
+        if mini:
+            self._normal_size = self.get_size()          # to restore on the way out
+            wctx.add_class("mini")
+            for w in (self.title, self.summary, self.filt, self.error, self.scroll):
+                w.hide()
+            # no_show_all kept window.show_all() from revealing the strip at
+            # startup; clear it now so show_all reaches the auto-viewport GTK
+            # inserts between the ScrolledWindow and the box (a bare show() would
+            # leave that viewport — hence the squares — hidden).
+            self.mini_squares_scroll.set_no_show_all(False)
+            self.mini_squares_scroll.show_all()
+            # Ask for height 1; GTK clamps up to the content's minimum, so the
+            # window shrinks to the compact strip instead of keeping its old size.
+            self.resize(self._normal_size[0], 1)
+        else:
+            wctx.remove_class("mini")
+            self.mini_squares_scroll.hide()
+            for w in (self.title, self.summary, self.filt, self.scroll):
+                w.show()
+            # self.error stays hidden; the next _apply re-shows it if still failing
+            if self._normal_size:
+                self.resize(*self._normal_size)
 
     # ── filtering ────────────────────────────────────────────────────────────
     def _on_filter_toggled(self, btn, cat):
@@ -1127,6 +1212,14 @@ class DashboardWindow(Gtk.Window):
                 self.listbox.add(row)
             self._update_row(row, s, cat)
 
+            # mirror the session as a mini-mode state square (same key)
+            sq = self.squares.get(sid)
+            if sq is None:
+                sq = self._make_square()
+                self.squares[sid] = sq
+                self.mini_squares.pack_start(sq, False, False, 0)
+            self._update_square(sq, s, cat)
+
             # Entering an attention state (from a non-attention one) raises the
             # dashboard now and arms a delayed beep; leaving it cancels a beep
             # that hasn't fired yet. See _arm_sound / _sound_due.
@@ -1140,16 +1233,25 @@ class DashboardWindow(Gtk.Window):
                 self._cancel_sound(sid)
             self.prev_cat[sid] = cat
 
-        # drop sessions that vanished
+        # drop sessions that vanished (rows and their mirror squares)
         for sid in list(self.rows):
             if sid not in seen:
                 self.listbox.remove(self.rows.pop(sid))
                 self.prev_cat.pop(sid, None)
                 self._cancel_sound(sid)
+        for sid in list(self.squares):
+            if sid not in seen:
+                self.mini_squares.remove(self.squares.pop(sid))
 
         self.listbox.invalidate_sort()
         self.listbox.invalidate_filter()
         self.attention_rows = [r for r in self.rows.values() if r._attention]
+        # Order squares like the rows (attention first, then by name) and refresh
+        # the pulsing set — same prio/name keys as _sort_rows.
+        for i, sq in enumerate(sorted(self.squares.values(),
+                                      key=lambda w: (w._prio, w._sortname))):
+            self.mini_squares.reorder_child(sq, i)
+        self.attention_squares = [w for w in self.squares.values() if w._attention]
         self._update_summary(counts)
         self._update_system(sysres)
         return False  # one-shot idle callback
@@ -1273,6 +1375,52 @@ class DashboardWindow(Gtk.Window):
         if not meta["attention"]:
             row.get_style_context().remove_class("pulse")
 
+    # ── mini-mode state squares ──────────────────────────────────────────────
+    def _make_square(self):
+        # A small button = one session's state tile. It's a button (not a plain
+        # box) so CSS reliably paints the rounded, filled background and it gives
+        # click feedback; clicking it leaves mini mode. Fixed size via CSS.
+        sq = Gtk.Button()
+        sq.set_relief(Gtk.ReliefStyle.NONE)
+        sq.set_can_focus(False)
+        sq.get_style_context().add_class("square")
+        glyph = Gtk.Label()
+        sq.add(glyph)
+        sq._glyph = glyph
+        sq._prio, sq._sortname, sq._attention = 99, "", False
+        sq.connect("clicked", self._on_square_clicked)
+        sq.show_all()
+        return sq
+
+    def _update_square(self, sq, s, cat):
+        meta = CATEGORIES[cat]
+        name = " ".join((s.get("name") or os.path.basename(s.get("cwd", "")) or "?").split())
+        sq._glyph.set_text(meta["glyph"])
+        sq._prio = meta["prio"]
+        sq._sortname = name.lower()
+        sq._attention = meta["attention"]
+        ctx = sq.get_style_context()
+        for c in CAT_CLASSES:
+            ctx.remove_class(c)
+        ctx.add_class(cat)
+        if not meta["attention"]:
+            ctx.remove_class("pulse")
+        # tooltip carries what the collapsed square can't show
+        cpu, mem = s.get("_cpu"), s.get("_mem")
+        tip = f"{name} — {meta['label']}\n{shorten_path(s.get('cwd', ''))}"
+        act = s.get("_activity") or ""
+        if act:
+            tip += "\n" + _oneline(act, 120)
+        if cpu is not None or mem is not None:
+            tip += (f"\ncpu: {fmt_cpu(cpu) or '—'}   "
+                    f"mem: {fmt_mem(mem) if mem is not None else '—'}")
+        sq.set_tooltip_text(tip)
+
+    def _on_square_clicked(self, sq):
+        # Clicking any square pops back to the full view (and raises the window).
+        self.mini_btn.set_active(False)     # -> _on_toggle_mini -> _set_mini(False)
+        self.present()
+
     def _sort_rows(self, a, b):
         if a._prio != b._prio:
             return -1 if a._prio < b._prio else 1
@@ -1283,8 +1431,9 @@ class DashboardWindow(Gtk.Window):
     # ── attention pulse ──────────────────────────────────────────────────────
     def _pulse_tick(self):
         self._pulse_on = not self._pulse_on
-        for row in self.attention_rows:
-            ctx = row.get_style_context()
+        # Rows (normal mode) and state squares (mini mode) pulse in lockstep.
+        for w in self.attention_rows + self.attention_squares:
+            ctx = w.get_style_context()
             if self._pulse_on:
                 ctx.add_class("pulse")
             else:

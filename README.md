@@ -65,6 +65,17 @@ No pip packages, no build step — it's a single file.
 - **Esc** quits (in default mode; in `--top` mode use the window's close button).
 - Drag the title bar or header body to move the window.
 - The **`▔` toggle** in the top-right shows/hides the OS title bar.
+- The **`▬` toggle** ultra-minimizes the window (see below).
+
+## Ultra-minimized mode
+
+Click the **`▬`** toggle to collapse the dashboard to a compact ~64px strip. Each
+session becomes a single **state square** (the category glyph on a category-colored
+tile), with the Claude-usage and CPU/MEM meters still visible. Attention squares
+pulse just like the full rows. Click any square — or the toggle again — to pop back
+to the full view.
+
+![The dashboard collapsed to a compact strip of state squares](docs/screenshot-mini.png)
 
 ## Notes
 
@@ -73,5 +84,6 @@ No pip packages, no build step — it's a single file.
   with adaptive backoff because the endpoint is rate-limited.
 - Everything lives in `agents_dashboard.py`. See `CLAUDE.md` for architecture
   and the non-obvious gotchas.
-- The screenshot above is rendered from the real window with fake sessions and
-  can be regenerated with `python3 docs/make_screenshot.py` (needs a display).
+- The screenshots above are rendered from the real window with fake sessions and
+  can be regenerated with `python3 docs/make_screenshot.py` (needs a display); it
+  writes both `docs/screenshot.png` and `docs/screenshot-mini.png`.

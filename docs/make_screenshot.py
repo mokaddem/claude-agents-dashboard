@@ -157,18 +157,31 @@ def _resize_to_fit():
     return False
 
 
-def _capture():
-    gdkwin = win.get_window()
-    w, h = win.get_allocated_width(), win.get_allocated_height()
-    pb = Gdk.pixbuf_get_from_window(gdkwin, 0, 0, w, h)
-    os.makedirs(os.path.dirname(OUT), exist_ok=True)
-    pb.savev(OUT, "png", [], [])
-    print("wrote %s  (%dx%d)" % (OUT, w, h))
+OUT_MINI = OUT[:-4] + "-mini.png" if OUT.endswith(".png") else OUT + "-mini.png"
+
+
+def _snap(path):
+    pb = Gdk.pixbuf_get_from_window(win.get_window(), 0, 0,
+                                    win.get_allocated_width(), win.get_allocated_height())
+    os.makedirs(os.path.dirname(path), exist_ok=True)
+    pb.savev(path, "png", [], [])
+    print("wrote %s  (%dx%d)" % (path, win.get_allocated_width(), win.get_allocated_height()))
+
+
+def _capture_full():
+    _snap(OUT)
+    win.mini_btn.set_active(True)     # collapse to the ultra-minimized strip
+    return False
+
+
+def _capture_mini():
+    _snap(OUT_MINI)
     Gtk.main_quit()
     return False
 
 
-GLib.timeout_add(900, _resize_to_fit)     # let the first poll render
-GLib.timeout_add(1500, _resize_to_fit)    # settle wrapped-label heights
-GLib.timeout_add(2100, _capture)
+GLib.timeout_add(900, _resize_to_fit)      # let the first poll render
+GLib.timeout_add(1500, _resize_to_fit)     # settle wrapped-label heights
+GLib.timeout_add(2100, _capture_full)      # full view -> screenshot.png
+GLib.timeout_add(2800, _capture_mini)      # mini strip -> screenshot-mini.png
 Gtk.main()

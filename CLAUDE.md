@@ -193,8 +193,22 @@ be needed if GNOME cached the old association).
   runtime (`_on_toggle_chrome` → `set_decorated()`, `.chrome` CSS). It's a
   mouse-click, so it works even in `--top` (no focus needed) — meaning the title
   bar can always be brought back even after it (and, in `--top`, `Esc`) are gone.
+- Next to it, the **`▬` toggle** ultra-minimizes the window to a compact ~64px
+  strip (`_on_toggle_mini` → `_set_mini`, which adds the `.mini` class to the
+  window so the header padding tightens). The session list and header text hide;
+  each session collapses to one **state square** (`_make_square` /
+  `_update_square`: the category glyph on a category-coloured tile, keyed by
+  `sessionId` in `self.squares` exactly like the rows, mirrored in the same
+  `_apply` loop, and pulsing in lockstep with the rows via `_pulse_tick`). The
+  Claude-usage + CPU/MEM meters stay visible (they're reused in place — nothing
+  is reparented). Entering mini stores the window size in `self._normal_size` and
+  does `resize(w, 1)` so GTK clamps the window down to the strip's minimum;
+  clicking any square (`_on_square_clicked`) or the toggle again restores the
+  full view and that saved size. Also a mouse-click, so it works in `--top`.
 - Rows use CSS classes = category names; the activity label uses `.activity`
-  (monospace) and `.activity.expanded`.
+  (monospace) and `.activity.expanded`. The mini-mode squares reuse the same
+  category class names on a `button.square` base (`.mini` scopes the strip's
+  layout tweaks).
 
 ## Testing / verifying UI changes
 
