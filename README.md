@@ -73,3 +73,5 @@ No pip packages, no build step — it's a single file.
   with adaptive backoff because the endpoint is rate-limited.
 - Everything lives in `agents_dashboard.py`. See `CLAUDE.md` for architecture
   and the non-obvious gotchas.
+- The screenshot above is rendered from the real window with fake sessions and
+  can be regenerated with `python3 docs/make_screenshot.py` (needs a display).
