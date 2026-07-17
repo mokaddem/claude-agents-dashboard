@@ -197,9 +197,11 @@ be needed if GNOME cached the old association).
   strip (`_on_toggle_mini` → `_set_mini`, which adds the `.mini` class to the
   window so the header padding tightens). The session list and header text hide;
   each session collapses to one **state square** (`_make_square` /
-  `_update_square`: the category glyph on a category-coloured tile, keyed by
-  `sessionId` in `self.squares` exactly like the rows, mirrored in the same
-  `_apply` loop, and pulsing in lockstep with the rows via `_pulse_tick`). The
+  `_update_square`: the category glyph on a tile whose prominence tracks whether
+  the session needs YOU — a bright filled tile for the two attention states
+  (permission/question), a dull dark tile with a dimmed glyph for the rest —
+  keyed by `sessionId` in `self.squares` exactly like the rows, mirrored in the
+  same `_apply` loop, and pulsing in lockstep with the rows via `_pulse_tick`). The
   Claude-usage + CPU/MEM meters stay visible (they're reused in place — nothing
   is reparented). Entering mini stores the window size in `self._normal_size` and
   does `resize(w, 1)` so GTK clamps the window down to the strip's minimum;

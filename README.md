@@ -70,10 +70,11 @@ No pip packages, no build step — it's a single file.
 ## Ultra-minimized mode
 
 Click the **`▬`** toggle to collapse the dashboard to a compact ~64px strip. Each
-session becomes a single **state square** (the category glyph on a category-colored
-tile), with the Claude-usage and CPU/MEM meters still visible. Attention squares
-pulse just like the full rows. Click any square — or the toggle again — to pop back
-to the full view.
+session becomes a single **state square** (the category glyph on a tile). The two
+states that need you — needs-permission and waiting-on-you — show as bright filled
+tiles and pulse, while the rest stay dull so attention stands out. The Claude-usage
+and CPU/MEM meters remain visible. Click any square — or the toggle again — to pop
+back to the full view.
 
 ![The dashboard collapsed to a compact strip of state squares](docs/screenshot-mini.png)
 

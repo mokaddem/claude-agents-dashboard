@@ -557,19 +557,23 @@ row.idle              { border-left-color: #3a3f4b; }
 .mini .header         { padding: 3px 10px; }
 .mini .usage          { margin-top: 0; margin-bottom: 0; }
 
-/* one state square per session (mini mode): the category glyph on a filled,
-   category-coloured tile. The border is always 2px (transparent when calm) so
-   the pulse ring can appear without changing the square's size. */
-button.square         { min-width: 28px; min-height: 28px; padding: 0; margin: 0;
-                        border: 2px solid transparent; border-radius: 7px;
+/* one state square per session (mini mode): the category glyph on a tile. The
+   border is always 2px (transparent when calm) so the pulse ring can appear
+   without changing the square's size. Prominence follows whether the session
+   needs YOU: the two attention states get a bright, filled tile so they jump
+   out; the rest get a dull dark tile with a dimmed glyph so they recede. */
+button.square         { min-width: 22px; min-height: 22px; padding: 0; margin: 0;
+                        border: 2px solid transparent; border-radius: 6px;
                         background-image: none; box-shadow: none; outline: none;
-                        background-color: #20232b; color: #c7ccd6;
-                        font-size: 14px; }
+                        background-color: #1c1f27; color: #565c68;
+                        font-size: 12px; }
+/* input required -> bright, filled tile (stands out) */
 button.square.permission { background-color: #ff5c57; color: #1a0f0f; }
 button.square.question   { background-color: #f7c948; color: #241f08; }
-button.square.working    { background-color: #fb923c; color: #241606; }
-button.square.done       { background-color: #34d399; color: #062117; }
-button.square.idle       { background-color: #2b2f38; color: #8b93a3; }
+/* no input needed -> dull: dark tile, dimmed category-coloured glyph (recedes) */
+button.square.working    { background-color: #1c1f27; color: #7a5334; }
+button.square.done       { background-color: #1c1f27; color: #2f6f57; }
+button.square.idle       { background-color: #1c1f27; color: #464c58; }
 button.square.pulse      { border-color: rgba(255, 255, 255, 0.92); }
 """
 
