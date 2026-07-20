@@ -540,10 +540,13 @@ row.working           { border-left-color: #fb923c; }
 row.idle              { border-left-color: #3a3f4b; }
 
 .name                 { font-weight: 700; font-size: 12px; color: #eceef3; }
-/* small "which repo" tag in front of the session title (the repo folder name) */
+/* small "which repo" tag in front of the session title (the repo folder name).
+   A muted indigo/blue so it reads as a distinct tag and pops a bit off the row,
+   but stays lower-saturation than the status badge at the row's end (which uses
+   the vivid category colours) so it doesn't compete for attention. */
 .project              { font-size: 9px; font-weight: 800; letter-spacing: 0.3px;
                         padding: 1px 6px; border-radius: 5px;
-                        background-color: #313641; color: #aeb6c4; }
+                        background-color: #3a4d84; color: #d6e0fb; }
 .cwd                  { font-size: 10px; color: #828a99; }
 /* live activity - code-like (monospace) so it reads distinctly from the .cwd
    working path above it; expanding brightens it and drops it into a panel. */
