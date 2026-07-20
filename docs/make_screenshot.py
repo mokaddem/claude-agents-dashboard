@@ -45,14 +45,16 @@ def _proj(*parts):
 
 # ── fake sessions (cover every category + the CPU highlight tiers) ───────────
 # Session names are task-ish and deliberately differ from their repo folder, so
-# the project badge (the repo folder) reads as distinct from the title.
+# the project badge (the repo folder) reads as distinct from the title. Two are
+# git worktrees of the same "pivotick" project (folders pivotick-improvements /
+# pivotick-search) — the badge shows the project, the path shows the worktree.
 SESSIONS = [
     dict(sessionId="s-payments", pid=40101, name="refunds-migration",
-         cwd=_proj("git", "payments-api"), state="working", status="waiting"),
+         cwd=_proj("git", "pivotick-improvements"), state="working", status="waiting"),
     dict(sessionId="s-mobile", pid=40202, name="auth-flow",
          cwd=_proj("git", "mobile-app"), state="blocked", status="idle"),
     dict(sessionId="s-search", pid=40303, name="reindex",
-         cwd=_proj("git", "search-indexer"), state="working", status="busy"),
+         cwd=_proj("git", "pivotick-search"), state="working", status="busy"),
     dict(sessionId="s-web", pid=40404, name="usage-charts",
          cwd=_proj("git", "web-dashboard"), state="working", status="busy"),
     dict(sessionId="s-infra", pid=40505, name="vpc-refactor",
@@ -109,8 +111,17 @@ SYSRES = {"cpu": 34.0, "mem_pct": 62.0,
 ad.fetch = lambda: [dict(s) for s in SESSIONS]       # fresh dicts each poll
 ad.fetch_usage = lambda: dict(USAGE)
 # The fake cwds don't exist on disk, so real .git-walking would fall back to
-# whatever ancestor happens to be a repo. Force the folder name for the demo.
-ad.read_project = lambda cwd: os.path.basename((cwd or "").rstrip("/"))
+# whatever ancestor happens to be a repo. Resolve (project, worktree_root) from
+# fixtures: the two pivotick-* folders are worktrees of the "pivotick" project;
+# everything else is a normal repo whose project == its folder.
+_WORKTREE_PROJECT = {
+    _proj("git", "pivotick-improvements"): "pivotick",
+    _proj("git", "pivotick-search"): "pivotick",
+}
+ad.read_repo = lambda cwd: (
+    _WORKTREE_PROJECT.get(cwd, os.path.basename((cwd or "").rstrip("/"))),
+    cwd or "",
+)
 
 
 def _fake_activity(self, s):

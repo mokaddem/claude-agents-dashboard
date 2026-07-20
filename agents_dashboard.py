@@ -88,25 +88,83 @@ def shorten_path(p):
     return p
 
 
-def read_project(cwd):
-    """Best-effort project name for a session: the basename of the git repo root
-    containing `cwd` (walk up until a `.git` entry turns up), falling back to
-    `cwd`'s own basename when it isn't in a repo. '' for an empty cwd; never
-    raises. Cheap + cached by cwd in DashboardWindow._project_for."""
+def _worktree_project(gitfile):
+    """Main-repo folder name for a *linked* worktree, given its `.git` file
+    (which is `gitdir: <main>/.git/worktrees/<name>`), or None. This is what lets
+    the badge show the project (e.g. `pivotick`) rather than the worktree folder
+    (`pivotick-improvements`). Uses the worktree's `commondir` pointer to find the
+    main `.git`, then takes that dir's parent. Never raises."""
+    try:
+        with open(gitfile) as f:
+            line = f.read(4096).strip()
+    except OSError:
+        return None
+    if not line.startswith("gitdir:"):
+        return None
+    gitdir = line[len("gitdir:"):].strip()
+    if not os.path.isabs(gitdir):
+        gitdir = os.path.join(os.path.dirname(os.path.abspath(gitfile)), gitdir)
+    gitdir = os.path.normpath(gitdir)
+    try:                                    # `commondir` -> the main repo's .git
+        with open(os.path.join(gitdir, "commondir")) as f:
+            rel = f.read().strip()
+        common = rel if os.path.isabs(rel) else os.path.join(gitdir, rel)
+    except OSError:                         # fall back: strip "/worktrees/<name>"
+        common = os.path.dirname(os.path.dirname(gitdir))
+    common = os.path.normpath(common)
+    root = os.path.dirname(common) if os.path.basename(common) == ".git" else common
+    name = os.path.basename(root)
+    if name.endswith(".git"):               # bare main repo (e.g. repo.git)
+        name = name[:-4]
+    return name or None
+
+
+def read_repo(cwd):
+    """Resolve ``(project, worktree_root)`` for a session's cwd.
+
+    - ``worktree_root``: absolute path of the working-tree root containing cwd
+      (the directory holding its `.git`), or '' when cwd isn't in a git repo.
+    - ``project``: the repo's name. For a **linked worktree** this is the *main*
+      repo's folder (e.g. `pivotick`), NOT the worktree folder
+      (`pivotick-improvements`); it falls back to the worktree/cwd basename.
+
+    Walks up from cwd; cheap, memoized by cwd in DashboardWindow._repo_for, and
+    never raises. '' cwd -> ('', '')."""
     if not cwd:
-        return ""
+        return ("", "")
     d = os.path.abspath(cwd)
     try:
         while True:
-            if os.path.exists(os.path.join(d, ".git")):   # dir or gitfile
-                return os.path.basename(d) or d
+            git = os.path.join(d, ".git")
+            if os.path.isdir(git):                  # normal repo / main worktree
+                return (os.path.basename(d) or d, d)
+            if os.path.isfile(git):                 # linked worktree (.git is a file)
+                return (_worktree_project(git) or os.path.basename(d) or d, d)
             parent = os.path.dirname(d)
-            if parent == d:                               # hit the fs root
+            if parent == d:                         # hit the fs root
                 break
             d = parent
     except OSError:
         pass
-    return os.path.basename(os.path.abspath(cwd)) or cwd
+    return (os.path.basename(os.path.abspath(cwd)) or cwd, "")   # not in a repo
+
+
+def cwd_markup(cwd, worktree_root):
+    """Pango markup for the cwd line: the whole path stays muted (via the `.cwd`
+    CSS), but the worktree folder segment is brightened + bold so you can tell at
+    a glance which worktree a session is in. No emphasis when cwd isn't in a repo
+    (worktree_root == '')."""
+    disp = shorten_path(cwd)
+    esc = GLib.markup_escape_text
+    if not worktree_root:
+        return esc(disp)
+    wt_disp = shorten_path(worktree_root)
+    if not disp.startswith(wt_disp):                # safety: not a prefix
+        return esc(disp)
+    head, sep, base = wt_disp.rpartition(os.sep)
+    subpath = disp[len(wt_disp):]                   # cwd below the worktree root
+    return "%s<span foreground='#c9d2e2' weight='bold'>%s</span>%s" % (
+        esc(head + sep), esc(base), esc(subpath))
 
 
 def fetch():
@@ -790,7 +848,7 @@ class DashboardWindow(Gtk.Window):
         self.attention_squares = []   # squares currently pulsing (mirrors rows)
         self._activity_cache = {}     # sessionId -> ((mtime, size), activity str)
         self._transcript_path = {}    # sessionId -> resolved transcript path
-        self._project_cache = {}      # cwd -> project name (repo folder), memoized
+        self._project_cache = {}      # cwd -> (project, worktree_root), memoized
         self._prev_jiffies = {}       # pid -> cumulative CPU jiffies (last sample)
         self._prev_time = None        # monotonic time of last resource sample
         self._prev_cpu = None         # (busy, total) /proc/stat jiffies (last sample)
@@ -1118,18 +1176,18 @@ class DashboardWindow(Gtk.Window):
                 for s in data:
                     if isinstance(s, dict):
                         s["_activity"] = self._activity_for(s)
-                        s["_project"] = self._project_for(s)
+                        s["_project"], s["_worktree"] = self._repo_for(s)
                 sysres = self._sample_resources(data)
             GLib.idle_add(self._apply, data, sysres)
         finally:
             self._fetching = False
 
-    def _project_for(self, s):
-        # Repo folder name for the session's cwd; memoized (a session's cwd is
-        # fixed, and repo roots don't move). Runs in the fetch thread.
+    def _repo_for(self, s):
+        # (project, worktree_root) for the session's cwd; memoized (a session's
+        # cwd is fixed, and repo roots don't move). Runs in the fetch thread.
         cwd = s.get("cwd") or ""
         if cwd not in self._project_cache:
-            self._project_cache[cwd] = read_project(cwd)
+            self._project_cache[cwd] = read_repo(cwd)
         return self._project_cache[cwd]
 
     # ── live activity (transcript tail) ──────────────────────────────────────
@@ -1399,8 +1457,10 @@ class DashboardWindow(Gtk.Window):
         name = " ".join((s.get("name") or os.path.basename(s.get("cwd", "")) or "?").split())
 
         row._name.set_text(name)
-        row._cwd.set_text(shorten_path(s.get("cwd", "")))
-        # project badge (repo folder) in front of the title, when we can name it
+        # cwd stays muted, but the worktree folder segment is emphasised so the
+        # used worktree stands out at a glance (see cwd_markup).
+        row._cwd.set_markup(cwd_markup(s.get("cwd", ""), s.get("_worktree") or ""))
+        # project badge (repo folder; the *main* repo even inside a worktree)
         proj = s.get("_project") or ""
         row._project.set_text(proj)
         row._project.set_visible(bool(proj))
