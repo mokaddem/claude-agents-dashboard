@@ -32,7 +32,9 @@ it (see the dock-icon note below).
 
 - Module-level helpers: `classify()` (state/status → category), `fetch()` (runs
   the CLI, 15s timeout, returns list or `{"_error": ...}`), the activity
-  extractors `read_activity()` / `_tool_phrase()` / `_cap()` / `_oneline()`, and
+  extractors `read_activity()` / `_tool_phrase()` / `_cap()` / `_oneline()`,
+  `read_project()` (repo folder name for a cwd — walks up to the `.git` root,
+  falls back to the cwd basename), and
   the resource helpers `read_proc_stats()` (one `/proc` snapshot) /
   `read_system_cpu()` (`/proc/stat`) / `read_system_mem()` (`/proc/meminfo`) / `fmt_mem()` /
   `fmt_cpu()` / `fmt_stats()`, and the usage helpers `fetch_usage()` /
@@ -44,9 +46,11 @@ it (see the dock-icon note below).
 
 ### Poll cycle
 `GLib.timeout_add` → `poll()` spawns a **daemon thread** → `_fetch_thread()` runs
-`fetch()`, **enriches each session with `_activity`** (transcript I/O) **and with
-`_cpu`/`_mem`** via `_sample_resources()` (a `/proc` scan) — all off the main
-loop — then `GLib.idle_add(_apply, data, totals)` renders on the GTK thread.
+`fetch()`, **enriches each session with `_activity`** (transcript I/O), **`_project`**
+(the repo folder, via `_project_for` → `read_project`, memoized by cwd in
+`_project_cache`), **and `_cpu`/`_mem`** via `_sample_resources()` (a `/proc` scan)
+— all off the main loop — then `GLib.idle_add(_apply, data, totals)` renders on
+the GTK thread.
 Rows are reused, keyed by `sessionId`; `_apply` adds/updates/removes rows and
 re-runs sort + filter.
 
@@ -215,6 +219,10 @@ be needed if GNOME cached the old association).
   (monospace) and `.activity.expanded`. The mini-mode squares reuse the same
   category class names on a `button.square` base (`.mini` scopes the strip's
   layout tweaks).
+- The session title is prefixed by a small **project badge** (`.project`,
+  `row._project`) — the repo folder from `_project` — sharing one `namerow` box
+  with the title; it's `no_show_all` and shown by `_update_row` only when a
+  project name is known.
 
 ## Testing / verifying UI changes
 

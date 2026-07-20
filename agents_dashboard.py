@@ -88,6 +88,27 @@ def shorten_path(p):
     return p
 
 
+def read_project(cwd):
+    """Best-effort project name for a session: the basename of the git repo root
+    containing `cwd` (walk up until a `.git` entry turns up), falling back to
+    `cwd`'s own basename when it isn't in a repo. '' for an empty cwd; never
+    raises. Cheap + cached by cwd in DashboardWindow._project_for."""
+    if not cwd:
+        return ""
+    d = os.path.abspath(cwd)
+    try:
+        while True:
+            if os.path.exists(os.path.join(d, ".git")):   # dir or gitfile
+                return os.path.basename(d) or d
+            parent = os.path.dirname(d)
+            if parent == d:                               # hit the fs root
+                break
+            d = parent
+    except OSError:
+        pass
+    return os.path.basename(os.path.abspath(cwd)) or cwd
+
+
 def fetch():
     """Return a list of sessions, or {'_error': msg} on failure."""
     try:
@@ -519,6 +540,10 @@ row.working           { border-left-color: #fb923c; }
 row.idle              { border-left-color: #3a3f4b; }
 
 .name                 { font-weight: 700; font-size: 12px; color: #eceef3; }
+/* small "which repo" tag in front of the session title (the repo folder name) */
+.project              { font-size: 9px; font-weight: 800; letter-spacing: 0.3px;
+                        padding: 1px 6px; border-radius: 5px;
+                        background-color: #313641; color: #aeb6c4; }
 .cwd                  { font-size: 10px; color: #828a99; }
 /* live activity - code-like (monospace) so it reads distinctly from the .cwd
    working path above it; expanding brightens it and drops it into a panel. */
@@ -762,6 +787,7 @@ class DashboardWindow(Gtk.Window):
         self.attention_squares = []   # squares currently pulsing (mirrors rows)
         self._activity_cache = {}     # sessionId -> ((mtime, size), activity str)
         self._transcript_path = {}    # sessionId -> resolved transcript path
+        self._project_cache = {}      # cwd -> project name (repo folder), memoized
         self._prev_jiffies = {}       # pid -> cumulative CPU jiffies (last sample)
         self._prev_time = None        # monotonic time of last resource sample
         self._prev_cpu = None         # (busy, total) /proc/stat jiffies (last sample)
@@ -1089,10 +1115,19 @@ class DashboardWindow(Gtk.Window):
                 for s in data:
                     if isinstance(s, dict):
                         s["_activity"] = self._activity_for(s)
+                        s["_project"] = self._project_for(s)
                 sysres = self._sample_resources(data)
             GLib.idle_add(self._apply, data, sysres)
         finally:
             self._fetching = False
+
+    def _project_for(self, s):
+        # Repo folder name for the session's cwd; memoized (a session's cwd is
+        # fixed, and repo roots don't move). Runs in the fetch thread.
+        cwd = s.get("cwd") or ""
+        if cwd not in self._project_cache:
+            self._project_cache[cwd] = read_project(cwd)
+        return self._project_cache[cwd]
 
     # ── live activity (transcript tail) ──────────────────────────────────────
     def _transcript_file(self, s):
@@ -1288,13 +1323,23 @@ class DashboardWindow(Gtk.Window):
         glyph.get_style_context().add_class("glyph")
 
         text = Gtk.Box(orientation=Gtk.Orientation.VERTICAL)
+        # Session title, prefixed by a small project badge (the repo folder the
+        # session's cwd lives in). Both share one horizontal row; the badge is
+        # fixed-width and the name takes the rest (and ellipsizes).
+        project = Gtk.Label()
+        project.get_style_context().add_class("project")
+        project.set_valign(Gtk.Align.CENTER)
+        project.set_no_show_all(True)      # shown by _update_row only when known
         name = Gtk.Label(xalign=0.0)
         name.get_style_context().add_class("name")
         name.set_ellipsize(Pango.EllipsizeMode.END)
+        namerow = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=7)
+        namerow.pack_start(project, False, False, 0)
+        namerow.pack_start(name, True, True, 0)
         cwd = Gtk.Label(xalign=0.0)
         cwd.get_style_context().add_class("cwd")
         cwd.set_ellipsize(Pango.EllipsizeMode.START)
-        text.pack_start(name, False, False, 0)
+        text.pack_start(namerow, False, False, 0)
         text.pack_start(cwd, False, False, 0)
 
         badge = Gtk.Label()
@@ -1335,6 +1380,7 @@ class DashboardWindow(Gtk.Window):
         row.add(outer)
 
         row._glyph, row._name, row._cwd, row._badge = glyph, name, cwd, badge
+        row._project = project
         row._stats = stats
         row._act = act
         row._prio, row._sortname, row._attention = 99, "", False
@@ -1351,6 +1397,10 @@ class DashboardWindow(Gtk.Window):
 
         row._name.set_text(name)
         row._cwd.set_text(shorten_path(s.get("cwd", "")))
+        # project badge (repo folder) in front of the title, when we can name it
+        proj = s.get("_project") or ""
+        row._project.set_text(proj)
+        row._project.set_visible(bool(proj))
         activity = s.get("_activity") or ""
         row._activity_full = activity
         row._activity_short = _oneline(activity)

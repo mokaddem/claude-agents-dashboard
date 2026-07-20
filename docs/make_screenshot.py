@@ -44,21 +44,23 @@ def _proj(*parts):
 
 
 # ── fake sessions (cover every category + the CPU highlight tiers) ───────────
+# Session names are task-ish and deliberately differ from their repo folder, so
+# the project badge (the repo folder) reads as distinct from the title.
 SESSIONS = [
-    dict(sessionId="s-payments", pid=40101, name="payments-api",
+    dict(sessionId="s-payments", pid=40101, name="refunds-migration",
          cwd=_proj("git", "payments-api"), state="working", status="waiting"),
-    dict(sessionId="s-mobile", pid=40202, name="mobile-app",
+    dict(sessionId="s-mobile", pid=40202, name="auth-flow",
          cwd=_proj("git", "mobile-app"), state="blocked", status="idle"),
-    dict(sessionId="s-search", pid=40303, name="search-indexer",
+    dict(sessionId="s-search", pid=40303, name="reindex",
          cwd=_proj("git", "search-indexer"), state="working", status="busy"),
-    dict(sessionId="s-web", pid=40404, name="web-dashboard",
+    dict(sessionId="s-web", pid=40404, name="usage-charts",
          cwd=_proj("git", "web-dashboard"), state="working", status="busy"),
-    dict(sessionId="s-infra", pid=40505, name="infra",
+    dict(sessionId="s-infra", pid=40505, name="vpc-refactor",
          cwd=_proj("git", "infra"), state="working", status="busy"),
-    dict(sessionId="s-docs", pid=40606, name="docs",
+    dict(sessionId="s-docs", pid=40606, name="api-reference",
          cwd=_proj("git", "docs"), state="done", status="idle"),
-    dict(sessionId="s-scratch", pid=40707, name="scratch",
-         cwd=HOME, state="idle", status="idle"),
+    dict(sessionId="s-scratch", pid=40707, name="ui-spike",
+         cwd=_proj("git", "design-system"), state="idle", status="idle"),
 ]
 
 ACTIVITY = {
@@ -106,6 +108,9 @@ SYSRES = {"cpu": 34.0, "mem_pct": 62.0,
 # ── stubs (replace the live CLI / /proc / network with the fixtures above) ────
 ad.fetch = lambda: [dict(s) for s in SESSIONS]       # fresh dicts each poll
 ad.fetch_usage = lambda: dict(USAGE)
+# The fake cwds don't exist on disk, so real .git-walking would fall back to
+# whatever ancestor happens to be a repo. Force the folder name for the demo.
+ad.read_project = lambda cwd: os.path.basename((cwd or "").rstrip("/"))
 
 
 def _fake_activity(self, s):

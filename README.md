@@ -14,7 +14,9 @@ sort to the top with alarm-colored cards; a busy test run is flagged with a red 
 
 Per session:
 
-- **Name** and **working directory**
+- **Name** and **working directory**, with a small **project badge** in front of
+  the name — the repo folder the session is working in (found by walking up to the
+  `.git` root)
 - A **state badge** derived from the session's state + status
 - A live **"currently working on"** line (tailed from the session transcript)
 - The session's **CPU% and resident memory** — summed over the agent process
