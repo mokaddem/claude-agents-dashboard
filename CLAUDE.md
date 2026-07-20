@@ -80,16 +80,20 @@ the Claude usage meter on the left — same shared system-monitor style.
 the OAuth `accessToken` from `~/.claude/.credentials.json` (`_oauth_token()`
 re-reads the file each poll, since Claude Code refreshes + rewrites it; skips the
 call if `expiresAt` has passed). The payload's `five_hour` / `seven_day` /
-`seven_day_opus` windows each carry `utilization` (%) + `resets_at`. Only the
-**session (`five_hour`) window is displayed** right now — a `Gtk.ProgressBar`
-meter on the left of the resource band (`CLAUDE` cap + bar + `%` + a
-**`resets in …` countdown** from `_reset_rel`, shown inline; the shared
-`.meter-cap` / `.meter-bar` / `.meter-pct` / `.meter-reset` classes) whose fill +
-percent colour green → `.warn` ≥75% → `.crit` ≥90%. `seven_day`/`seven_day_opus`
-are still fetched and kept in `self._usage` (re-enabling them is trivial) but
-deliberately not rendered. The meter's children (`usage_bar`/`usage_pct`/
-`usage_reset`/`usage_err`) are `show()`n individually because the box has
-`no_show_all`; per-child visibility is then driven by `_render_usage`.
+`seven_day_opus` windows each carry `utilization` (%) + `resets_at`. The
+**session (`five_hour`) window is the headline meter** on the left of the resource
+band (`CLAUDE` cap + bar + `%` + a **`resets in …` countdown** from `_reset_rel`,
+shown inline; the shared `.meter-cap` / `.meter-bar` / `.meter-pct` /
+`.meter-reset` classes) whose fill + percent colour green → `.warn` ≥75% → `.crit`
+≥90%. Directly **beneath the main bar sits a 2px secondary bar** (`usage_bar_all`,
+`.meter-bar.thin`) for the weekly **"all models" (`seven_day`)** window — same
+colour ramp, no percent label of its own (the number lives in the box tooltip).
+The two bars are stacked in a vertical `usage_bars` box that takes the main bar's
+place in the row. `seven_day_opus` is still fetched and kept in `self._usage`
+(rendering it is trivial) but not shown. The meter's children (`usage_bar`/
+`usage_bar_all`/`usage_pct`/`usage_reset`/`usage_err`) are `show()`n individually
+because the box has `no_show_all`; per-child visibility is then driven by
+`_render_usage` (`usage_bar_all` shows only once the `seven_day` window has data).
 
 **This endpoint is rate-limited (HTTP 429).** So the poll self-schedules with
 **adaptive backoff** rather than a fixed timer: `_first_usage` (idle) →

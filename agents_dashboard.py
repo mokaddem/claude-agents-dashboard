@@ -470,6 +470,12 @@ progressbar.meter-bar progress { min-height: 7px; background-color: #34d399;
                                  border-radius: 4px; margin: 0; }
 progressbar.meter-bar.warn progress { background-color: #f7c948; }
 progressbar.meter-bar.crit progress { background-color: #ff5c57; }
+/* .thin: a 2px secondary bar (the weekly "all models" window) stacked right
+   under the main usage bar. Same colour ramp; the two-class selectors outrank
+   the .meter-bar rules above, shrinking only the height. */
+progressbar.meter-bar.thin          { min-height: 2px; }
+progressbar.meter-bar.thin trough   { min-height: 2px; border-radius: 2px; }
+progressbar.meter-bar.thin progress { min-height: 2px; border-radius: 2px; }
 
 /* clickable per-category filter toggles in the header */
 button.filter         { min-height: 0; min-width: 0; padding: 1px 9px;
@@ -850,17 +856,28 @@ class DashboardWindow(Gtk.Window):
         meters = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=18)
         meters.get_style_context().add_class("usage")
 
-        # left: Claude subscription usage (session 5h) + reset countdown. Hidden
-        # until the first success (see _render_usage). Weekly + Opus windows are
-        # still fetched (kept in self._usage) but intentionally not shown.
+        # left: Claude subscription usage (session 5h) + reset countdown, with a
+        # tiny secondary bar for the weekly "all models" (7d) window beneath it.
+        # Hidden until the first success (see _render_usage). The seven_day_opus
+        # window is still fetched (kept in self._usage) but intentionally not shown.
         self.usage_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=7)
         self.usage_box.set_valign(Gtk.Align.CENTER)
         self.usage_box.set_no_show_all(True)
         usage_cap = Gtk.Label(label="CLAUDE", xalign=0.0)
         usage_cap.get_style_context().add_class("meter-cap")
-        self.usage_bar = Gtk.ProgressBar()
-        self.usage_bar.set_valign(Gtk.Align.CENTER)
+        self.usage_bar = Gtk.ProgressBar()          # session (5h) window
         self.usage_bar.get_style_context().add_class("meter-bar")
+        # tiny secondary bar right below the main one: the weekly "all models"
+        # (seven_day) window. Same colour ramp, 2px tall (.thin); _render_usage
+        # shows it only once that window has data.
+        self.usage_bar_all = Gtk.ProgressBar()
+        for _c in ("meter-bar", "thin"):
+            self.usage_bar_all.get_style_context().add_class(_c)
+        self.usage_bar_all.set_no_show_all(True)
+        usage_bars = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=2)
+        usage_bars.set_valign(Gtk.Align.CENTER)
+        usage_bars.pack_start(self.usage_bar, False, False, 0)
+        usage_bars.pack_start(self.usage_bar_all, False, False, 0)
         self.usage_pct = Gtk.Label(xalign=1.0)
         self.usage_pct.get_style_context().add_class("meter-pct")
         self.usage_reset = Gtk.Label(xalign=0.0)  # "3h 55m left" until the reset
@@ -868,14 +885,15 @@ class DashboardWindow(Gtk.Window):
         self.usage_err = Gtk.Label()              # tiny badge shown on fetch failure
         self.usage_err.get_style_context().add_class("usage-err")
         self.usage_box.pack_start(usage_cap, False, False, 0)
-        self.usage_box.pack_start(self.usage_bar, True, True, 0)
+        self.usage_box.pack_start(usage_bars, True, True, 0)
         self.usage_box.pack_end(self.usage_err, False, False, 0)     # far right
         self.usage_box.pack_end(self.usage_reset, False, False, 0)   # left of badge
         self.usage_box.pack_end(self.usage_pct, False, False, 0)     # left of reset
         # Children shown explicitly (box has no_show_all); per-child visibility is
-        # then driven by _render_usage.
-        for _w in (usage_cap, self.usage_bar, self.usage_pct, self.usage_reset,
-                   self.usage_err):
+        # then driven by _render_usage. (usage_bar_all stays no_show_all — shown
+        # only when the seven_day window has data.)
+        for _w in (usage_cap, usage_bars, self.usage_bar, self.usage_pct,
+                   self.usage_reset, self.usage_err):
             _w.show()
         meters.pack_start(self.usage_box, True, True, 0)
 
@@ -1543,11 +1561,16 @@ class DashboardWindow(Gtk.Window):
         return False  # one-shot idle callback
 
     def _render_usage(self):
-        # Weekly (seven_day) + Opus are also in self._usage but not rendered yet.
+        # Percent shown is the session (five_hour) window; the tiny bar beneath it
+        # is the weekly "all models" (seven_day) window. seven_day_opus is also in
+        # self._usage but not rendered.
         u = self._usage or {}
         fh = u.get("five_hour") or {}
+        sd = u.get("seven_day") or {}
         pct = fh.get("utilization")
+        pct_all = sd.get("utilization")
         have = pct is not None
+        have_all = pct_all is not None
         err = self._usage_error
         if not have and not err:
             self.usage_box.set_visible(False)   # nothing to show yet
@@ -1567,10 +1590,24 @@ class DashboardWindow(Gtk.Window):
             rel = _reset_rel(r)
             self.usage_reset.set_text(
                 "" if rel == "?" else "resetting" if rel == "now" else rel + " left")
-            self.usage_box.set_tooltip_text(
-                "Claude session usage (5h): %d%%\nResets in %s (%s)"
-                % (round(pct), rel, _reset_abs(r)))
+            tip = ("Claude session usage (5h): %d%%\nResets in %s (%s)"
+                   % (round(pct), rel, _reset_abs(r)))
+            # secondary thin bar: weekly all-models window (same colour ramp)
+            if have_all:
+                self.usage_bar_all.set_fraction(max(0.0, min(1.0, pct_all / 100.0)))
+                actx = self.usage_bar_all.get_style_context()
+                actx.remove_class("warn")
+                actx.remove_class("crit")
+                if pct_all >= 90:
+                    actx.add_class("crit")
+                elif pct_all >= 75:
+                    actx.add_class("warn")
+                r2 = sd.get("resets_at")
+                tip += ("\n\nAll models (7d): %d%%\nResets in %s (%s)"
+                        % (round(pct_all), _reset_rel(r2), _reset_abs(r2)))
+            self.usage_box.set_tooltip_text(tip)
         self.usage_bar.set_visible(have)
+        self.usage_bar_all.set_visible(have and have_all)
         self.usage_pct.set_visible(have)
         self.usage_reset.set_visible(have)
         # tiny error badge instead of swallowing the failure

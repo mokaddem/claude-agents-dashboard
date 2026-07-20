@@ -25,7 +25,8 @@ In the header:
 
 - Whole-machine **CPU + memory** meters
 - A **Claude subscription usage** meter — a progress bar for the current
-  5-hour rate-limit window, with a "resets in …" countdown
+  5-hour rate-limit window, with a "resets in …" countdown, plus a thin bar
+  beneath it for the weekly all-models window
 
 ## Attention handling
 
