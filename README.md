@@ -93,3 +93,7 @@ back to the full view.
 - The screenshots above are rendered from the real window with fake sessions and
   can be regenerated with `python3 docs/make_screenshot.py` (needs a display); it
   writes both `docs/screenshot.png` and `docs/screenshot-mini.png`.
+
+## License
+
+[MIT](LICENSE)
